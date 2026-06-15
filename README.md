@@ -1,4 +1,4 @@
-# Open Kings Valley II
+# Open King's Valley II
 An open-source remake of King's Valley II (MSX2, 1985).
 
 ## Goals
