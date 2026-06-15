@@ -1,3 +1,21 @@
 # Open Kings Valley II
-Open Kings Valley II is an open-source reimplementation of King's Valley II for the web.
-The project aims to faithfully recreate the original MSX2 gameplay while offering optional enhanced graphics, modern audio, improved controls, widescreen support, and new community-created content.
+An open-source remake of King's Valley II (MSX2, 1985).
+
+## Goals
+- Faithful recreation of the original gameplay
+- Original MSX2 graphics and sound mode
+- Enhanced graphics and audio mode
+- Modern browser-based implementation
+- Level editor support
+- Community-created pyramids
+- Preservation of a classic MSX game
+
+## Technology
+- React
+- TypeScript
+- HTML5 Canvas
+- Web Audio API
+- Vite
+
+## Status
+🚧 Early development
