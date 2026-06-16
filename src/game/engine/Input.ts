@@ -2,7 +2,7 @@ export class Input {
   private down = new Set<string>();
   private pressed = new Set<string>();
 
-  private onKeyDown = (event: KeyboardEvent) => {
+  private keyDown = (event: KeyboardEvent) => {
     if (!this.down.has(event.code)) {
       this.pressed.add(event.code);
     }
@@ -10,25 +10,25 @@ export class Input {
     this.down.add(event.code);
   };
 
-  private onKeyUp = (event: KeyboardEvent) => {
+  private keyUp = (event: KeyboardEvent) => {
     this.down.delete(event.code);
   };
 
   attach() {
-    window.addEventListener("keydown", this.onKeyDown);
-    window.addEventListener("keyup", this.onKeyUp);
+    window.addEventListener("keydown", this.keyDown);
+    window.addEventListener("keyup", this.keyUp);
   }
 
   detach() {
-    window.removeEventListener("keydown", this.onKeyDown);
-    window.removeEventListener("keyup", this.onKeyUp);
+    window.removeEventListener("keydown", this.keyDown);
+    window.removeEventListener("keyup", this.keyUp);
   }
 
-  isDown(code: string) {
+  isDown(code: string): boolean {
     return this.down.has(code);
   }
 
-  isPressed(code: string) {
+  consumePressed(code: string): boolean {
     const value = this.pressed.has(code);
     this.pressed.delete(code);
     return value;

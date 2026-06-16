@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Game } from "./game/Game";
+import "./App.css";
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -14,18 +15,10 @@ export default function App() {
   }, []);
 
   return (
-    <main>
-      <canvas
-        ref={canvasRef}
-        width={256}
-        height={192}
-        style={{
-          width: "768px",
-          height: "576px",
-          imageRendering: "pixelated",
-          background: "black",
-        }}
-      />
+    <main className="app">
+      <h1>OpenKingsValley2</h1>
+      <canvas ref={canvasRef} width={256} height={192} className="game-canvas" />
+      <p>Frecce: muovi · Spazio: salta · M: Original/Enhanced</p>
     </main>
   );
 }
