@@ -3,6 +3,7 @@ import { createPlayer } from "./actors/Player";
 import { GameStatus } from "./core/GameStatus";
 import { Input } from "./engine/Input";
 import { PlayerSystem } from "./engine/PlayerSystem";
+import { RotatingDoorSystem } from "./engine/RotatingDoorSystem";
 import { ItemTile } from "./maps/Tile";
 import { TileMap } from "./maps/TileMap";
 import { Camera } from "./renderer/Camera";
@@ -36,6 +37,7 @@ export class Game {
   private readonly player = createPlayer();
   private readonly camera = new Camera();
   private readonly playerSystem = new PlayerSystem();
+  private readonly doorSystem = new RotatingDoorSystem();
   private readonly renderer: Renderer;
 
   private knives: KnifeProjectile[] = [];
@@ -87,6 +89,7 @@ export class Game {
       lives: this.lives,
       knives: this.knives,
       mummies: this.mummies,
+      doors: this.doorSystem.getDoors(),
     });
 
     this.raf = requestAnimationFrame(this.loop);
@@ -125,36 +128,27 @@ export class Game {
   }
 
   private tickPlaying() {
+    this.doorSystem.update();
+
     const action = this.playerSystem.update(
       this.player,
       this.input,
-      this.map
+      this.map,
+      (x, y) => this.doorSystem.isBlockingAtPixel(x, y)
     );
 
-    if (action === "throwKnife") {
-      this.spawnKnife();
-    }
-
-    if (action === "dig") {
-      this.digBlock();
-    }
+    if (action === "throwKnife") this.spawnKnife();
+    if (action === "dig") this.digBlock();
+    if (action === "pushDoor") this.pushRotatingDoor();
 
     if (this.map.collectGemAtPixel(this.player.x + 6, this.player.y + 8)) {
       this.score += 100;
     }
 
-    const item = this.map.collectItemAtPixel(
-      this.player.x + 6,
-      this.player.y + 8
-    );
+    const item = this.map.collectItemAtPixel(this.player.x + 6, this.player.y + 8);
 
-    if (item === ItemTile.Knife) {
-      this.player.hasKnife = true;
-    }
-
-    if (item === ItemTile.Pickaxe) {
-      this.player.hasPickaxe = true;
-    }
+    if (item === ItemTile.Knife) this.player.hasKnife = true;
+    if (item === ItemTile.Pickaxe) this.player.hasPickaxe = true;
 
     this.updateKnives();
     this.updateMummies();
@@ -162,6 +156,16 @@ export class Game {
     this.checkPlayerHits();
 
     this.camera.update(this.player.x);
+  }
+
+  private pushRotatingDoor() {
+    const direction = this.player.direction === "left" ? -1 : 1;
+    const targetX = direction > 0 ? this.player.x + 14 : this.player.x - 2;
+    const targetY = this.player.y + 8;
+
+    if (this.doorSystem.pushAtPixel(targetX, targetY)) {
+      this.score += 25;
+    }
   }
 
   private spawnKnife() {
@@ -181,7 +185,10 @@ export class Game {
 
       knife.x += knife.vx;
 
-      if (this.map.isSolidAtPixel(knife.x, knife.y)) {
+      if (
+        this.map.isSolidAtPixel(knife.x, knife.y) ||
+        this.doorSystem.isBlockingAtPixel(knife.x, knife.y)
+      ) {
         knife.active = false;
       }
 
@@ -203,10 +210,11 @@ export class Game {
 
       const hitsWall =
         this.map.isSolidAtPixel(sideX, mummy.y + 4) ||
-        this.map.isSolidAtPixel(sideX, mummy.y + 14);
+        this.map.isSolidAtPixel(sideX, mummy.y + 14) ||
+        this.doorSystem.isBlockingAtPixel(sideX, mummy.y + 4) ||
+        this.doorSystem.isBlockingAtPixel(sideX, mummy.y + 14);
 
-      const hasFloor =
-        this.map.isSolidAtPixel(sideX, footY);
+      const hasFloor = this.map.isSolidAtPixel(sideX, footY);
 
       if (hitsWall || !hasFloor) {
         mummy.vx *= -1;
@@ -279,12 +287,7 @@ export class Game {
 
   private digBlock() {
     const direction = this.player.direction === "left" ? -1 : 1;
-
-    const targetX =
-      direction > 0
-        ? this.player.x + 14
-        : this.player.x - 2;
-
+    const targetX = direction > 0 ? this.player.x + 14 : this.player.x - 2;
     const targetY = this.player.y + 16;
 
     if (this.map.removeSolidAtPixel(targetX, targetY)) {
@@ -302,11 +305,6 @@ export class Game {
     bw: number,
     bh: number
   ): boolean {
-    return (
-      ax < bx + bw &&
-      ax + aw > bx &&
-      ay < by + bh &&
-      ay + ah > by
-    );
+    return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
   }
 }

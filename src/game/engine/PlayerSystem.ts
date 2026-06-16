@@ -1,20 +1,27 @@
 import type { Player } from "../actors/Player";
 import { PlayerStatus } from "../actors/Player";
-import type { Input } from "./Input";
 import type { TileMap } from "../maps/TileMap";
 import { isStairs } from "../maps/Tile";
+import type { Input } from "./Input";
 
-export type PlayerAction = "throwKnife" | "dig" | null;
+export type PlayerAction = "throwKnife" | "dig" | "pushDoor" | null;
+
+type DoorBlockingCheck = (x: number, y: number) => boolean;
 
 export class PlayerSystem {
-  update(player: Player, input: Input, map: TileMap): PlayerAction {
+  update(
+    player: Player,
+    input: Input,
+    map: TileMap,
+    isDoorBlockingAtPixel: DoorBlockingCheck
+  ): PlayerAction {
     switch (player.status) {
       case PlayerStatus.Walking:
-        return this.walk(player, input, map);
+        return this.walk(player, input, map, isDoorBlockingAtPixel);
 
       case PlayerStatus.Jumping:
       case PlayerStatus.Falling:
-        this.jumpOrFall(player, input, map);
+        this.jumpOrFall(player, input, map, isDoorBlockingAtPixel);
         break;
 
       case PlayerStatus.Stairs:
@@ -32,7 +39,12 @@ export class PlayerSystem {
     return null;
   }
 
-  private walk(player: Player, input: Input, map: TileMap): PlayerAction {
+  private walk(
+    player: Player,
+    input: Input,
+    map: TileMap,
+    isDoorBlockingAtPixel: DoorBlockingCheck
+  ): PlayerAction {
     let dx = 0;
 
     if (input.isDown("ArrowLeft")) {
@@ -50,11 +62,9 @@ export class PlayerSystem {
       this.isOnStairs(player, map)
     ) {
       player.status = PlayerStatus.Stairs;
-      player.x = Math.floor((player.x + 6) / 8) * 8 + 2;
       player.vy = 0;
       return null;
     }
-    
 
     if (input.consumePressed("Space")) {
       player.status = PlayerStatus.Jumping;
@@ -74,7 +84,7 @@ export class PlayerSystem {
       player.status = PlayerStatus.Digging;
       player.actionCounter = 21;
       return "dig";
-   }
+    }
 
     if (!this.hasFloor(player, map)) {
       player.status = PlayerStatus.Falling;
@@ -83,14 +93,26 @@ export class PlayerSystem {
     }
 
     if (dx !== 0) {
-      this.tryMoveX(player, dx, map);
+      const result = this.tryMoveX(player, dx, map, isDoorBlockingAtPixel);
+
+      if (result === "door") {
+        player.status = PlayerStatus.RotatingDoor;
+        player.actionCounter = 18;
+        return "pushDoor";
+      }
+
       player.moveCounter++;
     }
 
     return null;
   }
 
-  private jumpOrFall(player: Player, input: Input, map: TileMap) {
+  private jumpOrFall(
+    player: Player,
+    input: Input,
+    map: TileMap,
+    isDoorBlockingAtPixel: DoorBlockingCheck
+  ) {
     let dx = 0;
 
     if (input.isDown("ArrowLeft")) {
@@ -104,7 +126,7 @@ export class PlayerSystem {
     }
 
     if (dx !== 0) {
-      this.tryMoveX(player, dx, map);
+      this.tryMoveX(player, dx, map, isDoorBlockingAtPixel);
     }
 
     player.y += player.vy;
@@ -123,53 +145,52 @@ export class PlayerSystem {
     player.moveCounter++;
   }
 
+  private stairs(player: Player, input: Input, map: TileMap) {
+    let dy = 0;
 
-   private stairs(player: Player, input: Input, map: TileMap) {
-     let dy = 0;
+    if (input.isDown("ArrowUp")) dy = -1;
+    if (input.isDown("ArrowDown")) dy = 1;
 
-     if (input.isDown("ArrowUp")) dy = -1;
-     if (input.isDown("ArrowDown")) dy = 1;
-
-     if (input.consumePressed("Space")) {
-       player.status = PlayerStatus.Jumping;
-       player.vy = -3.5;
-       return;
+    if (input.consumePressed("Space")) {
+      player.status = PlayerStatus.Jumping;
+      player.vy = -3.5;
+      return;
     }
 
-     if (input.isDown("ArrowLeft")) {
-       player.direction = "left";
-       player.status = PlayerStatus.Walking;
-       return;
+    if (input.isDown("ArrowLeft")) {
+      player.direction = "left";
+      player.status = PlayerStatus.Walking;
+      return;
     }
 
-     if (input.isDown("ArrowRight")) {
-       player.direction = "right";
-       player.status = PlayerStatus.Walking;
-       return;
+    if (input.isDown("ArrowRight")) {
+      player.direction = "right";
+      player.status = PlayerStatus.Walking;
+      return;
     }
 
-     if (dy === 0) return;
+    if (dy === 0) return;
 
-     player.y += dy;
-     player.moveCounter++;
+    player.y += dy;
+    player.moveCounter++;
 
     const stillOnStairs =
-       this.isOnStairs(player, map) ||
-       isStairs(map.getTileAtPixel(player.x + 6, player.y + 4)) ||
+      this.isOnStairs(player, map) ||
+      isStairs(map.getTileAtPixel(player.x + 6, player.y + 4)) ||
       isStairs(map.getTileAtPixel(player.x + 6, player.y + 16));
 
-     if (!stillOnStairs) {
-       player.y = Math.round(player.y / 8) * 8;
+    if (!stillOnStairs) {
+      player.y = Math.round(player.y / 8) * 8;
 
-       if (this.hasFloor(player, map)) {
-         player.status = PlayerStatus.Walking;
-         player.vy = 0;
-       } else {
-         player.status = PlayerStatus.Falling;
-         player.vy = 0;
+      if (this.hasFloor(player, map)) {
+        player.status = PlayerStatus.Walking;
+        player.vy = 0;
+      } else {
+        player.status = PlayerStatus.Falling;
+        player.vy = 0;
       }
-     }
-   }
+    }
+  }
 
   private action(player: Player) {
     player.actionCounter--;
@@ -180,17 +201,34 @@ export class PlayerSystem {
     }
   }
 
-  private tryMoveX(player: Player, dx: number, map: TileMap) {
+  private tryMoveX(
+    player: Player,
+    dx: number,
+    map: TileMap,
+    isDoorBlockingAtPixel: DoorBlockingCheck
+  ): "moved" | "blocked" | "door" {
     const nextX = player.x + dx;
     const sideX = dx < 0 ? nextX : nextX + 11;
 
-    const blocked =
-      map.isSolidAtPixel(sideX, player.y + 2) ||
-      map.isSolidAtPixel(sideX, player.y + 15);
+    const headY = player.y + 4;
+    const footY = player.y + 15;
 
-    if (!blocked) {
-      player.x = nextX;
-    }
+    const hitsBlockingDoor =
+      (map.isRotatingDoorAtPixel(sideX, headY) &&
+        isDoorBlockingAtPixel(sideX, headY)) ||
+      (map.isRotatingDoorAtPixel(sideX, footY) &&
+        isDoorBlockingAtPixel(sideX, footY));
+
+    if (hitsBlockingDoor) return "door";
+
+    const blocked =
+      map.isSolidAtPixel(sideX, headY) ||
+      map.isSolidAtPixel(sideX, footY);
+
+    if (blocked) return "blocked";
+
+    player.x = nextX;
+    return "moved";
   }
 
   private hasFloor(player: Player, map: TileMap): boolean {
@@ -202,8 +240,8 @@ export class PlayerSystem {
     );
   }
 
-   private isOnStairs(player: Player, map: TileMap): boolean {
-     return (
+  private isOnStairs(player: Player, map: TileMap): boolean {
+    return (
       isStairs(map.getTileAtPixel(player.x + 2, player.y + 8)) ||
       isStairs(map.getTileAtPixel(player.x + 6, player.y + 8)) ||
       isStairs(map.getTileAtPixel(player.x + 10, player.y + 8)) ||

@@ -13,11 +13,19 @@ export enum ItemTile {
 }
 
 export function tileFamily(tile: number): TileFamily {
-  return tile & 0xf0;
+  return (tile & 0xf0) as TileFamily;
 }
 
 export function isSolid(tile: number): boolean {
   return tileFamily(tile) === TileFamily.Wall;
+}
+
+export function isRotatingDoor(tile: number): boolean {
+  return tileFamily(tile) === TileFamily.RotatingDoor;
+}
+
+export function isBlocking(tile: number): boolean {
+  return isSolid(tile);
 }
 
 export function isStairs(tile: number): boolean {
