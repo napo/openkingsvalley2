@@ -1,11 +1,21 @@
 export class Camera {
   x = 0;
   y = 0;
+  room = 0;
 
-  update(playerX: number) {
-    this.x = Math.max(0, playerX - 128);
+  readonly roomWidth = 256;
+  readonly maxRoom = 2;
 
-    const maxCameraX = 96 * 8 - 256;
-    this.x = Math.min(this.x, maxCameraX);
+  setRoom(room: number) {
+    this.room = Math.max(0, Math.min(this.maxRoom, room));
+    this.x = this.room * this.roomWidth;
+  }
+
+  nextRoom() {
+    this.setRoom(this.room + 1);
+  }
+
+  previousRoom() {
+    this.setRoom(this.room - 1);
   }
 }

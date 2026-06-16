@@ -1,6 +1,7 @@
 import { createMummy, type Mummy } from "./actors/Mummy";
 import { createPlayer } from "./actors/Player";
 import { GameStatus } from "./core/GameStatus";
+import { createDigEffect, type DigEffect } from "./effects/DigEffect";
 import { Input } from "./engine/Input";
 import { PlayerSystem } from "./engine/PlayerSystem";
 import { RotatingDoorSystem } from "./engine/RotatingDoorSystem";
@@ -41,6 +42,7 @@ export class Game {
   private readonly renderer: Renderer;
 
   private knives: KnifeProjectile[] = [];
+  private digEffects: DigEffect[] = [];
 
   private mummies: Mummy[] = [
     createMummy(180, 128),
@@ -50,6 +52,7 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
+    this.camera.setRoom(0);
   }
 
   start() {
@@ -90,6 +93,7 @@ export class Game {
       knives: this.knives,
       mummies: this.mummies,
       doors: this.doorSystem.getDoors(),
+      digEffects: this.digEffects,
     });
 
     this.raf = requestAnimationFrame(this.loop);
@@ -138,7 +142,7 @@ export class Game {
     );
 
     if (action === "throwKnife") this.spawnKnife();
-    if (action === "dig") this.digBlock();
+    if (action === "dig") this.startDigBlock();
     if (action === "pushDoor") this.pushRotatingDoor();
 
     if (this.map.collectGemAtPixel(this.player.x + 6, this.player.y + 8)) {
@@ -150,12 +154,65 @@ export class Game {
     if (item === ItemTile.Knife) this.player.hasKnife = true;
     if (item === ItemTile.Pickaxe) this.player.hasPickaxe = true;
 
+    this.updateDigEffects();
     this.updateKnives();
     this.updateMummies();
     this.checkKnifeHits();
     this.checkPlayerHits();
+    this.checkRoomTransition();
+  }
 
-    this.camera.update(this.player.x);
+  private startDigBlock() {
+    const direction = this.player.direction === "left" ? -1 : 1;
+    const targetX = direction > 0 ? this.player.x + 14 : this.player.x - 2;
+    const targetY = this.player.y + 16;
+
+    const { tx, ty } = this.map.getTileCoordsAtPixel(targetX, targetY);
+
+    if (!this.map.isSolidTile(tx, ty)) {
+      return;
+    }
+
+    this.digEffects.push(createDigEffect(tx, ty));
+  }
+
+  private updateDigEffects() {
+    for (const effect of this.digEffects) {
+      effect.timer--;
+
+      if (effect.timer <= 0 && !effect.done) {
+        if (this.map.removeSolidTile(effect.tx, effect.ty)) {
+          this.score += 50;
+        }
+
+        effect.done = true;
+      }
+    }
+
+    this.digEffects = this.digEffects.filter((effect) => !effect.done);
+  }
+
+  private checkRoomTransition() {
+    const roomStart = this.camera.room * this.camera.roomWidth;
+    const roomEnd = roomStart + this.camera.roomWidth;
+
+    if (this.player.x + 12 >= roomEnd) {
+      if (this.camera.room < this.camera.maxRoom) {
+        this.camera.nextRoom();
+        this.player.x = this.camera.x + 4;
+      } else {
+        this.player.x = roomEnd - 12;
+      }
+    }
+
+    if (this.player.x <= roomStart) {
+      if (this.camera.room > 0) {
+        this.camera.previousRoom();
+        this.player.x = this.camera.x + this.camera.roomWidth - 16;
+      } else {
+        this.player.x = roomStart;
+      }
+    }
   }
 
   private pushRotatingDoor() {
@@ -278,20 +335,11 @@ export class Game {
     this.player.hasPickaxe = false;
 
     this.knives = [];
+    this.camera.setRoom(0);
 
     if (this.lives <= 0) {
       this.status = GameStatus.GameOver;
       this.timer = 0;
-    }
-  }
-
-  private digBlock() {
-    const direction = this.player.direction === "left" ? -1 : 1;
-    const targetX = direction > 0 ? this.player.x + 14 : this.player.x - 2;
-    const targetY = this.player.y + 16;
-
-    if (this.map.removeSolidAtPixel(targetX, targetY)) {
-      this.score += 50;
     }
   }
 

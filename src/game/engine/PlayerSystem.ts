@@ -174,10 +174,7 @@ export class PlayerSystem {
     player.y += dy;
     player.moveCounter++;
 
-    const stillOnStairs =
-      this.isOnStairs(player, map) ||
-      isStairs(map.getTileAtPixel(player.x + 6, player.y + 4)) ||
-      isStairs(map.getTileAtPixel(player.x + 6, player.y + 16));
+    const stillOnStairs = this.isOnStairs(player, map);
 
     if (!stillOnStairs) {
       player.y = Math.round(player.y / 8) * 8;
@@ -241,13 +238,20 @@ export class PlayerSystem {
   }
 
   private isOnStairs(player: Player, map: TileMap): boolean {
-    return (
-      isStairs(map.getTileAtPixel(player.x + 2, player.y + 8)) ||
-      isStairs(map.getTileAtPixel(player.x + 6, player.y + 8)) ||
-      isStairs(map.getTileAtPixel(player.x + 10, player.y + 8)) ||
-      isStairs(map.getTileAtPixel(player.x + 2, player.y + 14)) ||
-      isStairs(map.getTileAtPixel(player.x + 6, player.y + 14)) ||
-      isStairs(map.getTileAtPixel(player.x + 10, player.y + 14))
-    );
+    const points = [
+       [player.x + 1, player.y + 6],
+       [player.x + 6, player.y + 6],
+       [player.x + 11, player.y + 6],
+       [player.x + 1, player.y + 12],
+       [player.x + 6, player.y + 12],
+       [player.x + 11, player.y + 12],
+       [player.x + 1, player.y + 17],
+       [player.x + 6, player.y + 17],
+       [player.x + 11, player.y + 17],
+    ];
+
+     return points.some(([x, y]) => isStairs(map.getTileAtPixel(x, y)));
   }
+
+
 }

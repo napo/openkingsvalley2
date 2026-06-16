@@ -72,6 +72,26 @@ export class TileMap {
     this.setTile(tx, ty, 0x00);
     return true;
   }
+  
+  getTileCoordsAtPixel(x: number, y: number) {
+  return {
+    tx: Math.floor(x / this.tileSize),
+    ty: Math.floor(y / this.tileSize),
+  };
+}
+
+isSolidTile(tx: number, ty: number): boolean {
+  return (this.getTile(tx, ty) & 0xf0) === 0x10;
+}
+
+removeSolidTile(tx: number, ty: number): boolean {
+  if (!this.isSolidTile(tx, ty)) {
+    return false;
+  }
+
+  this.setTile(tx, ty, 0x00);
+  return true;
+}
 
   private buildTestMap() {
     for (let x = 0; x < this.width; x++) {

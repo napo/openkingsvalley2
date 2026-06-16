@@ -1,8 +1,9 @@
 import type { Mummy } from "../actors/Mummy";
 import type { Player } from "../actors/Player";
 import { GameStatus } from "../core/GameStatus";
-import type { KnifeProjectile } from "../Game";
+import type { DigEffect } from "../effects/DigEffect";
 import type { RotatingDoor } from "../engine/RotatingDoorSystem";
+import type { KnifeProjectile } from "../Game";
 import {
   isGem,
   isItem,
@@ -14,6 +15,10 @@ import {
 } from "../maps/Tile";
 import type { TileMap } from "../maps/TileMap";
 import type { Camera } from "./Camera";
+import {
+  drawMsxSprite16,
+  MsxSpriteStore,
+} from "./MsxSprite";
 
 export interface RenderState {
   timer: number;
@@ -27,10 +32,12 @@ export interface RenderState {
   knives: KnifeProjectile[];
   mummies: Mummy[];
   doors: RotatingDoor[];
+  digEffects: DigEffect[];
 }
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
+  private readonly sprites = new MsxSpriteStore();
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -38,6 +45,10 @@ export class Renderer {
 
     this.ctx = ctx;
     this.ctx.imageSmoothingEnabled = false;
+
+    this.sprites.load().catch((error) => {
+      console.warn(error);
+    });
   }
 
   render(state: RenderState) {
@@ -87,9 +98,10 @@ export class Renderer {
     const cameraX = state.camera.x;
 
     this.drawMap(state.map, cameraX);
+    this.drawDigEffects(state.digEffects, cameraX);
     this.drawDoors(state.doors, cameraX);
     this.drawKnives(state.knives, cameraX);
-    this.drawMummies(state.mummies, cameraX);
+    this.drawMummies(state.mummies, cameraX, state.graphicsMode);
     this.drawPlayer(state.player, cameraX, state.graphicsMode);
     this.drawDebug(state.player, cameraX, state.score, state.lives);
   }
@@ -105,19 +117,17 @@ export class Renderer {
       for (let x = firstTile; x <= lastTile; x++) {
         const tile = map.getTile(x, y);
 
-        if (isRotatingDoor(tile)) {
-          continue;
-        }
+        if (isRotatingDoor(tile)) continue;
 
         const screenX = x * map.tileSize - cameraX;
         const screenY = y * map.tileSize;
 
         if (isSolid(tile)) {
           this.ctx.fillStyle = "#b58b4c";
-          this.ctx.fillRect(screenX, screenY, map.tileSize, map.tileSize);
+          this.ctx.fillRect(screenX, screenY, 8, 8);
 
           this.ctx.fillStyle = "#6b4e2e";
-          this.ctx.fillRect(screenX, screenY + 7, map.tileSize, 1);
+          this.ctx.fillRect(screenX, screenY + 7, 8, 1);
         }
 
         if (isStairs(tile)) {
@@ -157,6 +167,31 @@ export class Renderer {
     }
   }
 
+  private drawDigEffects(effects: DigEffect[], cameraX: number) {
+    for (const effect of effects) {
+      const x = effect.tx * 8 - cameraX;
+      const y = effect.ty * 8;
+      const progress = 1 - effect.timer / effect.duration;
+
+      this.ctx.fillStyle = "#8a5a2b";
+      this.ctx.fillRect(x, y, 8, 8);
+
+      this.ctx.fillStyle = "#111";
+
+      if (progress > 0.25) this.ctx.fillRect(x + 3, y + 3, 2, 2);
+
+      if (progress > 0.5) {
+        this.ctx.fillRect(x + 1, y + 1, 2, 2);
+        this.ctx.fillRect(x + 5, y + 5, 2, 2);
+      }
+
+      if (progress > 0.75) {
+        this.ctx.fillRect(x + 1, y + 5, 2, 2);
+        this.ctx.fillRect(x + 5, y + 1, 2, 2);
+      }
+    }
+  }
+
   private drawDoors(doors: RotatingDoor[], cameraX: number) {
     for (const door of doors) {
       const x = door.tx * 8 - cameraX;
@@ -168,7 +203,11 @@ export class Renderer {
         continue;
       }
 
-      const width = door.state === "closed" ? 6 : Math.max(2, 6 - door.frame);
+      const width =
+        door.state === "closed"
+          ? 6
+          : Math.max(2, 6 - door.frame);
+
       const offset = Math.floor((8 - width) / 2);
 
       this.ctx.fillStyle = "#2f80ff";
@@ -186,16 +225,40 @@ export class Renderer {
     this.ctx.fillStyle = "#ffffff";
 
     for (const knife of knives) {
-      this.ctx.fillRect(Math.floor(knife.x - cameraX), Math.floor(knife.y), 6, 1);
+      this.ctx.fillRect(
+        Math.floor(knife.x - cameraX),
+        Math.floor(knife.y),
+        6,
+        1
+      );
     }
   }
 
-  private drawMummies(mummies: Mummy[], cameraX: number) {
+  private drawMummies(
+    mummies: Mummy[],
+    cameraX: number,
+    mode: "original" | "enhanced"
+  ) {
+    const msxMummies = this.sprites.getSprites("GFX_MOMIA");
+
     for (const mummy of mummies) {
       if (!mummy.active) continue;
 
       const x = Math.floor(mummy.x - cameraX);
       const y = Math.floor(mummy.y);
+
+      if (mode === "original" && msxMummies.length > 0) {
+        const sprite = msxMummies[mummy.frame % msxMummies.length];
+        drawMsxSprite16(
+          this.ctx,
+          sprite,
+          x,
+          y,
+          "#e0e0e0",
+          mummy.direction === "left"
+        );
+        continue;
+      }
 
       this.ctx.fillStyle = "#e0e0e0";
       this.ctx.fillRect(x, y, 12, 16);
@@ -211,9 +274,38 @@ export class Renderer {
     }
   }
 
-  private drawPlayer(player: Player, cameraX: number, mode: "original" | "enhanced") {
+  private drawPlayer(
+    player: Player,
+    cameraX: number,
+    mode: "original" | "enhanced"
+  ) {
     const screenX = Math.floor(player.x - cameraX);
     const screenY = Math.floor(player.y);
+
+    if (mode === "original") {
+      const label = player.hasPickaxe
+        ? "GFX_ProtaPico"
+        : player.hasKnife
+          ? "GFX_ProtaKnife"
+          : "GFX_Prota";
+
+      const sprites = this.sprites.getSprites(label);
+
+      if (sprites.length > 0) {
+        const sprite = sprites[player.frame % sprites.length];
+
+        drawMsxSprite16(
+          this.ctx,
+          sprite,
+          screenX - 2,
+          screenY,
+          "#ffffff",
+          player.direction === "left"
+        );
+
+        return;
+      }
+    }
 
     if (mode === "original") {
       this.ctx.fillStyle = "#ffffff";
@@ -229,7 +321,12 @@ export class Renderer {
     this.ctx.fillRect(screenX + 7, screenY + 4, 2, 2);
   }
 
-  private drawDebug(player: Player, cameraX: number, score: number, lives: number) {
+  private drawDebug(
+    player: Player,
+    cameraX: number,
+    score: number,
+    lives: number
+  ) {
     this.ctx.fillStyle = "#ffffff";
     this.ctx.font = "8px monospace";
 
